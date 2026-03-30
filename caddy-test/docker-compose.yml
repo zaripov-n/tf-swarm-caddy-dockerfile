@@ -1,0 +1,160 @@
+services:
+  caddy-controller:
+    image: caddy-custom:local
+    command: caddy docker-proxy
+    networks:
+      - caddy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CADDY_DOCKER_MODE=controller
+      - CADDY_DOCKER_CADDYFILE_PATH=/etc/caddy/Caddyfile
+      - S3_ACCESS_KEY_ID_FILE=/run/secrets/s3_access_key
+      - S3_SECRET_KEY_FILE=/run/secrets/s3_secret_key
+      - ACME_EMAIL=it@mindbox.clou
+    secrets:
+      - s3_access_key
+      - s3_secret_key
+      - yc_dns_key_json
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+        - node.role == manager
+
+  caddy-server:
+    image: caddy-custom:local
+    # Серверу не нужен доступ к сокету! Он получает конфиг от контроллера по API
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    networks:
+      - caddy
+    ports:
+      - target: 80
+        published: 80
+        mode: host # host mode важен для NLB и реальных IP
+      - target: 443
+        published: 443
+        mode: host
+    environment:
+      - ACME_EMAIL=it@mindbox.cloud
+      - S3_ACCESS_KEY_ID_FILE=/run/secrets/s3_access_key
+      - S3_SECRET_KEY_FILE=/run/secrets/s3_secret_key
+      - YANDEXCLOUD_SERVICE_ACCOUNT_KEY_FILE=/run/secrets/yc_dns_key_json
+    secrets:
+      - s3_access_key
+      - s3_secret_key
+      - yc_dns_key_json
+    configs:
+      - source: caddy_config
+        target: /etc/caddy/Caddyfile
+    deploy:
+      mode: global
+      placement:
+        constraints:
+        - node.role == worker
+#        - node.labels.caddy-ignore != true
+
+networks:
+  caddy:
+    external: true
+
+configs:
+  caddy_config:
+    file: ./Caddyfile
+
+secrets:
+  s3_access_key:
+    external: true
+  s3_secret_key:
+    external: true
+  yc_dns_key_json:
+    external: true
+
+
+# ---
+# services:
+#   caddy-controller:
+#     image: ghcr.io/wgos/caddy-docker-build:main # надо перетащить контейнер в регестри проекта
+#     networks:
+#       - caddy
+#       - caddy-control
+#     volumes:
+#       - /var/run/docker.sock:/var/run/docker.sock:ro
+#     configs:
+#       - source: caddy-global-config
+#         target: /etc/caddy/Caddyfile
+#     environment:
+#       CADDY_DOCKER_MODE: controller
+#       CADDY_INGRESS_NETWORKS: caddy
+#       CADDY_CONTROLLER_NETWORK: "10.200.200.0/24"
+#     deploy:
+#       replicas: 1
+#       placement:
+#         constraints:
+#           - node.role == manager
+
+#   caddy-server:
+#     image: ghcr.io/wgos/caddy-docker-build:main # надо перетащить контейнер в регестри проекта
+#     networks:
+#       - caddy
+#       - caddy-control
+#     ports:
+#       - target: 2019      # caddy admin/metrics
+#         published: 8080   # под NLB healthcheck
+#         mode: host
+#       - target: 80
+#         published: 80
+#         mode: host
+#       - target: 443
+#         published: 443
+#         mode: host
+#     configs:
+#       - source: caddy-global-config
+#         target: /etc/caddy/Caddyfile
+#     environment:
+#       CADDY_DOCKER_MODE: server
+#       CADDY_INGRESS_NETWORKS: caddy
+#       CADDY_CONTROLLER_NETWORK: "10.200.200.0/24"
+#       S3_HOST: storage.yandexcloud.net
+#       S3_BUCKET: ${S3_BUCKET}
+#       S3_PREFIX: production
+#       S3_ACCESS_KEY_ID_FILE: /run/secrets/s3_access_key #решил в s3 закинуть, на обсуждение
+#       S3_SECRET_KEY_FILE: /run/secrets/s3_secret_key
+#       CF_API_TOKEN_FILE: /run/secrets/caddy-dns-token
+#       ACME_EMAIL: ${ACME_EMAIL}
+#     secrets:
+#       - s3_access_key
+#       - s3_secret_key
+#     deploy:
+#       mode: global
+#       placement:
+#         constraints:
+#           - node.role == worker
+#           - node.labels.caddy-ignore != true # взял тоже из легаси, если вдруг нужно будет выкинуть ноду без изменений стека
+#       labels:
+#         caddy_controlled_server:
+
+# networks:
+#   caddy:
+#     external: true
+#   caddy-control:
+#     driver: overlay
+#     driver_opts:
+#       com.docker.network.driver.mtu: 1450 # дефолтные 
+#     ipam:
+#       driver: default
+#       config:
+#         - subnet: "10.200.200.0/24"
+
+# configs:
+#   caddy-global-config:
+#     file: ./Caddyfile
+
+# secrets:
+#   s3_access_key:
+#     external: true
+#   s3_secret_key:
+#     external: true

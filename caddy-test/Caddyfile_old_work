@@ -1,0 +1,27 @@
+{
+storage s3 {
+    host storage.yandexcloud.net
+    bucket prod-swarm-caddy-certs
+    # В этом плагине ключи называются ТАК:
+    access_id "{$S3_ACCESS_KEY_ID}"
+    secret_key "{$S3_SECRET_KEY}"
+    prefix caddy/certs
+    }
+}
+    email "{$ACME_EMAIL}"
+}
+
+http://:80 {
+    @ping path /ping
+    respond @ping "PONG" 200
+    
+    @not_ping not path /ping
+    redir @not_ping https://{host}{uri} 308
+}
+
+*.swarm-msk.mnbx.dev {
+    tls {
+        # lego подхватит YANDEXCLOUD_OAUTH_TOKEN из окружения автоматически
+        dns lego_deprecated yandex
+    }
+}

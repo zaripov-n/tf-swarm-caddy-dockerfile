@@ -1,0 +1,29 @@
+# Стейдж сборки
+FROM golang:1.24-alpine AS builder
+
+# Устанавливаем git и сертификаты, иначе go get не сможет качать плагины
+RUN apk add --no-cache git ca-certificates
+
+# Устанавливаем xcaddy
+RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+
+# Собираем Caddy
+# На Go 1.24+ все современные плагины должны собраться без проблем
+RUN xcaddy build \
+    --with github.com/lucaslorentz/caddy-docker-proxy/v2 \
+    --with github.com/caddy-dns/yandex \
+    --with github.com/fvbommel/caddy-combine-ip-ranges \
+    --with github.com/techknowlogick/certmagic-s3
+
+# Финальный стейдж
+FROM caddy:2.9-alpine
+
+# Копируем наш кастомный бинарник из папки, где его оставил xcaddy
+# По умолчанию xcaddy кладет бинарник в текущую директорию (.)
+COPY --from=builder /go/caddy /usr/bin/caddy
+
+# Твои скрипты и entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

@@ -1,0 +1,19 @@
+# Сборщик
+FROM golang:1.24-alpine AS builder
+RUN apk add --no-cache git ca-certificates
+RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+
+# Собираем бинарник (GOTOOLCHAIN сам подтянет Go 1.25 для Caddy 2.11)
+ENV GOTOOLCHAIN=auto
+RUN xcaddy build \
+    --with github.com/lucaslorentz/caddy-docker-proxy/v2 \
+    --with github.com/profcomff/caddy-dns-yandex-cloud \
+    --with github.com/fvbommel/caddy-combine-ip-ranges \
+    --with github.com/techknowlogick/certmagic-s3
+
+# Финальный образ
+FROM caddy:alpine
+COPY --from=builder /go/caddy /usr/bin/caddy
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

@@ -1,0 +1,20 @@
+# Используем 2.9 (или 2.9.1)
+ARG CADDY_VERSION=2.9.1
+FROM caddy:${CADDY_VERSION}-builder AS builder
+
+# Мы явно фиксируем версию прокси на v2.11.0, чтобы не требовать Go 1.25
+RUN xcaddy build \
+    --with github.com/lucaslorentz/caddy-docker-proxy/v2@v2.11.0 \
+    --with github.com/caddy-dns/yandex \
+    --with github.com/fvbommel/caddy-combine-ip-ranges \
+    --with github.com/techknowlogick/certmagic-s3
+
+FROM caddy:${CADDY_VERSION}-alpine
+
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+
+# Entrypoint и прочее
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
